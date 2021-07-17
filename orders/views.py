@@ -9,9 +9,7 @@ from django.db            import transaction
 from users.models    import User, UserCoupon, Coupon
 from orders.models   import CartItem, Order, OrderItem, OrderStatus, OrderItemStatus
 from products.models import Product, Option, ProductOption
-from orders.models   import CartItem
 from utils           import login_decorator
-
 class CartView(View):
     @login_decorator
     def get(self, request):
@@ -141,16 +139,22 @@ class PurchaseView(View):
             total_price       = 0
             delivery_fee      = DELIVERY_VALUE['default']
             coupon_id         = data.get('couponId', None)
-            
+            product_updates   = []
+
             if not cart_items.exists():
                 return JsonResponse({"message":"NO_ITEMS_IN_CART"}, status=400)
             
             for cart_item in cart_items:
                 if cart_item.quantity > cart_item.product_options.product.stock:
                     return JsonResponse({'message':'SOLD_OUT', 'soldOutProduct':cart_item.product_options.product.name}, status=400)
-                
+
+                product_update = cart_item.product_options.product
+                product_update.sales += cart_item.quantity
+                product_update.stock -= cart_item.quantity
+                product_updates.append(product_update)
+
                 total_price += (cart_item.quantity * cart_item.product_options.product.price)
-            
+
             if not Order.objects.filter(user=signed_user).exists() or total_price > DELIVERY_STANDARD:
                 delivery_fee = DELIVERY_VALUE['free']
 
@@ -182,25 +186,19 @@ class PurchaseView(View):
                 OrderItem.objects.bulk_create(
                     [
                         OrderItem(
-                            status_id      = OrderItemStatus.COMPLETED,
-                            product_option = ProductOption.objects.get(
-                                product_id = cart_item.product_options.product.id,
-                                option_id  = cart_item.product_options.option.id
-                                ),
-                            order          = order,
-                            quantity       = cart_item.quantity
+                            status_id         = OrderItemStatus.COMPLETED,
+                            product_option_id = cart_item.product_options.id,
+                            order             = order,
+                            quantity          = cart_item.quantity
                         ) for cart_item in cart_items
                     ]
                 )
 
-                for cart_item in cart_items:
-                    cart_item.product_options.product.sales += cart_item.quantity
-                    cart_item.product_options.product.stock -= cart_item.quantity
-                    cart_item.product_options.product.save()
-
+                Product.objects.bulk_update(product_updates, fields=['stock'])
+                Product.objects.bulk_update(product_updates, fields=['sales'])
                 cart_items.delete()
 
-                return JsonResponse({"message":"SUCCESS"}, status=201)
+            return JsonResponse({"message":"SUCCESS"}, status=201)
 
         except KeyError:
             return JsonResponse({"message":"KEY_ERROR"}, status=400)
