@@ -9,7 +9,6 @@ from django.db            import transaction
 from users.models    import User, UserCoupon, Coupon
 from orders.models   import CartItem, Order, OrderItem, OrderStatus, OrderItemStatus
 from products.models import Product, Option, ProductOption
-from orders.models   import CartItem
 from utils           import login_decorator
 
 class CartView(View):
