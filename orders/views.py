@@ -10,6 +10,7 @@ from users.models    import User, UserCoupon, Coupon
 from orders.models   import CartItem, Order, OrderItem, OrderStatus, OrderItemStatus
 from products.models import Product, Option, ProductOption
 from utils           import login_decorator
+
 class CartView(View):
     @login_decorator
     def get(self, request):
@@ -133,7 +134,10 @@ class PurchaseView(View):
         try:
             data              = json.loads(request.body)
             signed_user       = request.user
-            cart_items        = CartItem.objects.filter(user=signed_user).select_related('product_options__option', 'product_options__product')
+            cart_items        = CartItem.objects.filter(user=signed_user).select_related(
+                'product_options__option',
+                'product_options__product'
+                )
             DELIVERY_VALUE    = {'default': 2500, 'free': 0}
             DELIVERY_STANDARD = 50000
             total_price       = 0
@@ -146,7 +150,7 @@ class PurchaseView(View):
             
             for cart_item in cart_items:
                 if cart_item.quantity > cart_item.product_options.product.stock:
-                    return JsonResponse({'message':'SOLD_OUT', 'soldOutProduct':cart_item.product_options.product.name}, status=400)
+                    return JsonResponse({'message':'SOLD_OUT','soldOutProduct':cart_item.product_options.product.name}, status=400)
 
                 product_update = cart_item.product_options.product
                 product_update.sales += cart_item.quantity
